@@ -64,45 +64,6 @@ void set_mac_address(uint8_t *mac) { esp_base_mac_addr_set(mac); }
 
 std::string generate_hostname(const std::string &base) { return base + std::string("-") + get_mac_address(); }
 
-uint32_t random_uint32() {
-#ifdef USE_ESP32
-  return esp_random();
-#elif defined(USE_ESP8266)
-  return os_random();
-#endif
-}
-
-double random_double() { return random_uint32() / double(UINT32_MAX); }
-
-float random_float() { return float(random_double()); }
-
-void fill_random(uint8_t *data, size_t len) {
-#if defined(USE_ESP_IDF) || defined(USE_ESP32_FRAMEWORK_ARDUINO)
-  esp_fill_random(data, len);
-#elif defined(USE_ESP8266)
-  int err = os_get_random(data, len);
-  assert(err == 0);
-#else
-#error "No random source for this system config"
-#endif
-}
-
-static uint32_t fast_random_seed = 0;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-
-void fast_random_set_seed(uint32_t seed) { fast_random_seed = seed; }
-uint32_t fast_random_32() {
-  fast_random_seed = (fast_random_seed * 2654435769ULL) + 40503ULL;
-  return fast_random_seed;
-}
-uint16_t fast_random_16() {
-  uint32_t rand32 = fast_random_32();
-  return (rand32 & 0xFFFF) + (rand32 >> 16);
-}
-uint8_t fast_random_8() {
-  uint32_t rand32 = fast_random_32();
-  return (rand32 & 0xFF) + ((rand32 >> 8) & 0xFF);
-}
-
 float gamma_correct(float value, float gamma) {
   if (value <= 0.0f)
     return 0.0f;
@@ -245,19 +206,21 @@ void rgb_to_hsv(float red, float green, float blue, int &hue, float &saturation,
   float min_color_value = std::min(std::min(red, green), blue);
   float delta = max_color_value - min_color_value;
 
-  if (delta == 0)
+  if (delta == 0) {
     hue = 0;
-  else if (max_color_value == red)
+  } else if (max_color_value == red) {
     hue = int(fmod(((60 * ((green - blue) / delta)) + 360), 360));
-  else if (max_color_value == green)
+  } else if (max_color_value == green) {
     hue = int(fmod(((60 * ((blue - red) / delta)) + 120), 360));
-  else if (max_color_value == blue)
+  } else if (max_color_value == blue) {
     hue = int(fmod(((60 * ((red - green) / delta)) + 240), 360));
+  }
 
-  if (max_color_value == 0)
+  if (max_color_value == 0) {
     saturation = 0;
-  else
+  } else {
     saturation = delta / max_color_value;
+  }
 
   value = max_color_value;
 }
@@ -314,6 +277,29 @@ IRAM_ATTR InterruptLock::~InterruptLock() { portENABLE_INTERRUPTS(); }
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+// Mathematics
+
+uint32_t random_uint32() {
+#ifdef USE_ESP32
+  return esp_random();
+#elif defined(USE_ESP8266)
+  return os_random();
+#else
+#error "No random source available for this configuration."
+#endif
+}
+float random_float() { return static_cast<float>(random_uint32()) / static_cast<float>(UINT32_MAX); }
+bool random_bytes(uint8_t *data, size_t len) {
+#ifdef USE_ESP32
+  esp_fill_random(data, len);
+  return true;
+#elif defined(USE_ESP8266)
+  return os_get_random(data, len) == 0;
+#else
+#error "No random source available for this configuration."
+#endif
+}
+
 // Strings
 
 std::string str_truncate(const std::string &str, size_t length) {
@@ -355,14 +341,15 @@ size_t parse_hex(const char *str, size_t length, uint8_t *data, size_t count) {
   uint8_t val;
   size_t chars = std::min(length, 2 * count);
   for (size_t i = 2 * count - chars; i < 2 * count; i++, str++) {
-    if (*str >= '0' && *str <= '9')
+    if (*str >= '0' && *str <= '9') {
       val = *str - '0';
-    else if (*str >= 'A' && *str <= 'F')
+    } else if (*str >= 'A' && *str <= 'F') {
       val = 10 + (*str - 'A');
-    else if (*str >= 'a' && *str <= 'f')
+    } else if (*str >= 'a' && *str <= 'f') {
       val = 10 + (*str - 'a');
-    else
+    } else {
       return 0;
+    }
     data[i >> 1] = !(i & 1) ? val << 4 : data[i >> 1] | val;
   }
   return chars;
@@ -378,7 +365,7 @@ std::string format_hex(const uint8_t *data, size_t length) {
   }
   return ret;
 }
-std::string format_hex(std::vector<uint8_t> data) { return format_hex(data.data(), data.size()); }
+std::string format_hex(const std::vector<uint8_t> &data) { return format_hex(data.data(), data.size()); }
 
 static char format_hex_pretty_char(uint8_t v) { return v >= 10 ? 'A' + (v - 10) : '0' + v; }
 std::string format_hex_pretty(const uint8_t *data, size_t length) {
@@ -396,6 +383,6 @@ std::string format_hex_pretty(const uint8_t *data, size_t length) {
     return ret + " (" + to_string(length) + ")";
   return ret;
 }
-std::string format_hex_pretty(std::vector<uint8_t> data) { return format_hex_pretty(data.data(), data.size()); }
+std::string format_hex_pretty(const std::vector<uint8_t> &data) { return format_hex_pretty(data.data(), data.size()); }
 
 }  // namespace esphome
